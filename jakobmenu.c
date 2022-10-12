@@ -247,7 +247,13 @@ static void parseDotDesktop(const char* path)
             } else if(strcmp(key, "Icon") == 0) {
                 Icon = strdup(value);
             } else if(strcmp(key, "Exec") == 0) {
+                char* ss = NULL;
                 Exec = strdup(value);
+                // strip %U, openbox cannot provide that
+                while((ss = strstr(Exec, "%U")) != NULL) {
+                    ss[0] = ' ';
+                    ss[1] = ' ';
+                }
             } else if(strcmp(key, "Categories") == 0) {
                 Categories = strdup(value);
             } else if(strcmp(key, "Path") == 0) {
