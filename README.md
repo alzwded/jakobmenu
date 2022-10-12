@@ -6,12 +6,22 @@ pipemenu for openbox.
 Building
 --------
 
-You need perl and a C compiler.
+You need perl and a C compiler and a working `sys/tree.h`.
 
 ```sh
 ./configure
 make
 make install
+```
+
+If it complains about a missing `sys/tree.h`, then
+
+```sh
+apt install libbsd-dev
+yum install libbsd-devel
+dnf install libbsd-devel
+pacman install libbsd
+emerge --ask --verbose libbsd
 ```
 
 Configuration
