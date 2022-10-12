@@ -374,6 +374,16 @@ int main(int argc, char* argv[])
         err(1, "Failed to pledge");
 #endif
 
+#if HAVE_UNVEIL
+    // unveil rc files
+    unveil(ETC_CONF, "r");
+    unveil(HOME_CONF, "r");
+#endif
+
+    // parse rc files
+    parseRC(ETC_CONF);
+    parseRC(HOME_CONF);
+
     // parse command line
     // TODO
     // - add command line flag for menu name
@@ -400,10 +410,6 @@ int main(int argc, char* argv[])
     argv += optind;
 
 #if HAVE_UNVEIL
-    // unveil rc files
-    unveil(ETC_CONF, "r");
-    unveil(HOME_CONF, "r");
-
     // unveil all .desktop files
     unveilAll();
 
@@ -419,10 +425,6 @@ int main(int argc, char* argv[])
     printf("<openbox_pipe_menu>\n");
 
     printf(" <menu id=\"%s\" label=\"%s\">\n", menuId, menuTitle);
-
-    // parse rc files
-    parseRC(ETC_CONF);
-    parseRC(HOME_CONF);
 
     // parse all files
     parseAll();
