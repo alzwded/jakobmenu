@@ -19,11 +19,16 @@ my $prefix = "/usr/local";
 my $showHelp = 0;
 my $etc_conf = "/etc/jakobmenu.conf";
 my $home_conf = "~/.config/jakobmenu/conf";
+my $libbsdroot = undef;
+
+my $cflags = $ENV{CFLAGS} || "";
+my $ldflags = $ENV{LDFLAGS} || "";
 
 GetOptions("prefix=s" => \$prefix,
            "help" => \$showHelp,
            "etc_conf=s" => \$etc_conf,
-           "home_conf=s" => \$home_conf)
+           "home_conf=s" => \$home_conf,
+           "libbsd_root=s" => \$libbsdroot)
            or die("Error parsing command line");
 
 if($showHelp) {
@@ -36,6 +41,12 @@ $0 [-prefix=/usr/local]
                                            a quoted ~ will be expanded
                                            to the user's home directory
                                            at runtime.
+    -libbsd_root=/home/user/libbsd         if your system doesn't have
+                                           native support for sys/tree.h,
+                                           consider libbsd; if you can't
+                                           install it system-wide, use
+                                           this flag to point it to where
+                                           it is implemented
 
 This script generates Makefile.vars and config.h to generate sensible
 defaults based on what is detected in the environment, or your whims.
@@ -52,13 +63,14 @@ EOT
 }
 
 sub compile {
-    my ($what, $ccode, $cc, $lambda) = @_;
+    my ($what, $ccode, $cc, $lambda, $ildflags) = @_;
+    my $ldflags = $ildflags || "";
 
     print "Checking $what...\n";
     open A, ">test.c";
     print A $ccode;
 
-    my $compiles = system("$cc test.c") ? 0 : 1;
+    my $compiles = system("$cc test.c $ldflags") ? 0 : 1;
     my $exitCode = -1;
     if($compiles) {
         $exitCode = system("./a.out") >> 8;
@@ -104,58 +116,6 @@ foreach my $cc ($ENV{CC}, 'cc', 'gcc', 'clang') {
 
 die("Can't rely on compiler") if not $compiler;
 
-my $pledgeCode = <<EOT;
-#include <unistd.h>
-int main(int argc, char* argv[]) {
-    pledge(NULL, NULL);
-    return 0;
-}
-EOT
-compile("for pledge", $pledgeCode, $compiler, sub {
-    my ($compiles, $status) = @_;
-    $defines{HAVE_PLEDGE} = ($compiles && $status == 0) ? 1 : 0;
-});
-
-my $unveilCode = <<EOT;
-#include <unistd.h>
-int main(int argc, char* argv[]) {
-    unveil(NULL, NULL);
-    return 0;
-}
-EOT
-compile("for unveil", $unveilCode, $compiler, sub {
-    my ($compiles, $status) = @_;
-    $defines{HAVE_UNVEIL} = ($compiles && $status == 0) ? 1 : 0;
-});
-
-my $errhCode = <<EOT;
-#include <err.h>
-#include <errno.h>
-int main(int argc, char* argv[]) {
-    errno = EAGAIN;
-    warn("Warning %d", 42);
-    err(126, "Message %d", 126);
-    return 0;
-}
-EOT
-compile("for err() and warn()", $errhCode, $compiler, sub {
-    my ($compiles, $status) = @_;
-    my $include = "#include <err.h>";
-    my $fake = <<EOT;
-#define err(eval, fmt, ...) do{\\
-if(errno) {\\
-fprintf(stderr, "ERR: " fmt ": %d\n",##__VA_ARGS__, errno);\\
-exit((eval));\\
-}\\
-}while(0)
-#define warn(fmt, ...) do{\\
-fprintf(stderr, "WARN: " fmt ": %d\n",##__VA_ARGS__, errno);\\
-}while(0)
-EOT
-    $defines{ERRH} = ($compiles && $status == 126) ? $include : $fake;
-});
-
-
 print("Trying to guess how to compile C99\n");
 my $c99code = <<EOT;
 #if defined(__STDC__)
@@ -189,7 +149,173 @@ foreach my $flag ("", "-std=c99", "-std=gnu99", "--std=c99", "--std=gnu99") {
     }
 }
 
-# TODO check for tree(3), either natively, or via libbsd
+my $cc = "$compiler $c99switch";
+
+
+##################################################################
+# library features
+##################################################################
+
+
+my $pledgeCode = <<EOT;
+#include <unistd.h>
+int main(int argc, char* argv[]) {
+    pledge(NULL, NULL);
+    return 0;
+}
+EOT
+compile("for pledge", $pledgeCode, $cc, sub {
+    my ($compiles, $status) = @_;
+    $defines{HAVE_PLEDGE} = ($compiles && $status == 0) ? 1 : 0;
+});
+
+my $unveilCode = <<EOT;
+#include <unistd.h>
+int main(int argc, char* argv[]) {
+    unveil(NULL, NULL);
+    return 0;
+}
+EOT
+compile("for unveil", $unveilCode, $cc, sub {
+    my ($compiles, $status) = @_;
+    $defines{HAVE_UNVEIL} = ($compiles && $status == 0) ? 1 : 0;
+});
+
+my $errhCode = <<EOT;
+#include <err.h>
+#include <errno.h>
+int main(int argc, char* argv[]) {
+    errno = EAGAIN;
+    warn("Warning %d", 42);
+    err(126, "Message %d", 126);
+    return 0;
+}
+EOT
+compile("for err() and warn()", $errhCode, $cc, sub {
+    my ($compiles, $status) = @_;
+    my $include = "#include <err.h>";
+    my $fake = <<EOT;
+#define err(eval, fmt, ...) do{\\
+if(errno) {\\
+fprintf(stderr, "ERR: " fmt ": %d\n",##__VA_ARGS__, errno);\\
+exit((eval));\\
+}\\
+}while(0)
+#define warn(fmt, ...) do{\\
+fprintf(stderr, "WARN: " fmt ": %d\n",##__VA_ARGS__, errno);\\
+}while(0)
+EOT
+    $defines{ERRH} = ($compiles && $status == 126) ? $include : $fake;
+});
+
+
+my $treeCode = <<EOT;
+#include <sys/tree.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+struct node {
+    RB_ENTRY(node) entry;
+    int i;
+};
+
+int intcmp(struct node *, struct node *);
+void    print_tree(struct node *);
+
+int
+intcmp(struct node *e1, struct node *e2)
+{
+    return (e1->i < e2->i ? -1 : e1->i > e2->i);
+}
+
+RB_HEAD(inttree, node) head = RB_INITIALIZER(&head);
+RB_PROTOTYPE(inttree, node, entry, intcmp)
+RB_GENERATE(inttree, node, entry, intcmp)
+
+int testdata[] = {
+    20, 16, 17, 13, 3, 6, 1, 8, 2, 4, 10, 19, 5, 9, 12, 15, 18,
+    7, 11, 14
+};
+
+void
+print_tree(struct node *n)
+{
+    struct node *left, *right;
+
+    if (n == NULL) {
+        printf("nil");
+        return;
+    }
+    left = RB_LEFT(n, entry);
+    right = RB_RIGHT(n, entry);
+    if (left == NULL && right == NULL)
+        printf("%d", n->i);
+    else {
+        printf("%d(", n->i);
+        print_tree(left);
+        printf(",");
+        print_tree(right);
+        printf(")");
+    }
+}
+
+int
+main(void)
+{
+    int i;
+    struct node *n;
+
+    for (i = 0; i < sizeof(testdata) / sizeof(testdata[0]); i++) {
+        if ((n = malloc(sizeof(struct node))) == NULL)
+            exit(2);
+        n->i = testdata[i];
+        RB_INSERT(inttree, &head, n);
+    }
+
+    RB_FOREACH(n, inttree, &head) {
+        printf("%d\\n", n->i);
+    }
+    print_tree(RB_ROOT(&head));
+    printf("\\n");
+    return (0);
+}
+EOT
+
+my $systreehinclude = "#include <sys/tree.h>";
+if(!defined($libbsdroot)) {
+    if(!compile("for native sys/tree.h", $treeCode, "$cc $cflags", sub {
+        my ($compiles, $status) = @_;
+    
+        return $compiles && ($status == 0);
+    }, $ldflags)) {
+        $treeCode =~ s|#include <sys/tree\.h>|#include <bsd/sys/tree.h>|;
+        if(compile("for bsd/sys/tree.h with libbsd", $treeCode, "$cc", sub {
+            my ($compiles, $status) = @_;
+    
+            return $compiles && ($status == 0);
+        }, "-lbsd")) {
+            $systreehinclude = "#include <bsd/sys/tree.h>";
+            $ldflags .= " -lbsd";
+        } else {
+            die("Can't find sys/tree.h");
+        }
+    }
+} else {
+    $treeCode =~ s|#include <sys/tree\.h>|#include <bsd/sys/tree.h>|;
+    if(!compile("for sys/tree.h with \$libbsdroot", $treeCode, "$cc $cflags -isystem$libbsdroot/include -DLIBBSD_OVERLAY ", sub {
+        my ($compiles, $status) = @_;
+    
+        return $compiles && ($status == 0);
+    }, $ldflags." -L$libbsdroot/lib -lbsd ")) {
+        die("Can't find sys/tree.h");
+    } else {
+        $systreehinclude = "#include <bsd/sys/tree.h>";
+        $cflags .= " -DLIBBSD_OVERLAY -isystem$libbsdroot/include";
+        $ldflags .= " -L$libbsdroot -lbsd";
+    }
+}
+
+
 # TODO prompt user to install libbsd
 # TODO add flag to specify where libbsd is located
 
@@ -213,6 +339,8 @@ print A <<EOT;
 
 $defines{ERRH}
 
+$systreehinclude
+
 #define HAVE_PLEDGE $defines{HAVE_PLEDGE}
 #define HAVE_UNVEIL $defines{HAVE_UNVEIL}
 
@@ -221,9 +349,6 @@ $systempaths
 #endif
 EOT
 close(A);
-
-my $cflags = $ENV{CFLAGS} || "";
-my $ldflags = $ENV{LDFLAGS} || "";
 
 open A, ">Makefile.vars";
 print A <<EOT;

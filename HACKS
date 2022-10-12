@@ -1,0 +1,11 @@
+Linux tests:
+
+To test build with -libbsd_root:
+
+    ./configure -libbsd_root=/usr
+
+To test build with overlay and pretend we're on BSD:
+
+    export CFLAGS='-DLIBBSD_OVERLAY -isystem/usr/include/bsd -Duchar="unsigned char"'
+    export LDFLAGS=-lbsd
+    ./configure
