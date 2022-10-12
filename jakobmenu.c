@@ -156,7 +156,7 @@ static void parseRC(const char* path)
                 do {
                     c = fgetc(f);
                     if(feof(f) || c == '\n' || c < 0) break;
-                } while(1);
+                } while(!feof(f));
                 break;
             }
 
@@ -166,7 +166,7 @@ static void parseRC(const char* path)
                 line = (char*)realloc(line, lineCap);
                 assert(line);
             }
-        } while(1);
+        } while(!feof(f));
         lineNo++;
         line[lineLen] = '\0';
 
@@ -226,12 +226,19 @@ static void parseDotDesktop(const char* path)
         do {
             c = fgetc(f);
             if(c < 0 || feof(f) || c == '\n') break;
+            if(c == '#') {
+                do {
+                    c = fgetc(f);
+                    if(feof(f) || c == '\n' || c < 0) break;
+                } while(!feof(f));
+                break;
+            }
             line[lineLen++] = (c & 0xFF);
             if(lineLen >= lineCap) {
                 lineCap *= 2;
                 line = realloc(line, lineCap);
             }
-        } while(1);
+        } while(!feof(f));
         line[lineLen] = '\0';
 
         char *key = NULL, *value = NULL;
