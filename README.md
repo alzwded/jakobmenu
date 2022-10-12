@@ -38,3 +38,11 @@ In your OpenBox `menu.xml`, you can use this as a pipe menu:
 ```
 
 You can then include this menu by ID in your other menu structure(s).
+
+If you think `jakobmenu` is too slow, then you can run it once (in a while):
+
+```
+jakobmenu > ~/.config/jakobmenu/cache.xml
+```
+
+Then tell OpenBox to execute `cat ~/.config/jakobmenu/cache.xml`.
