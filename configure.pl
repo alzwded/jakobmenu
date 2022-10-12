@@ -19,7 +19,6 @@ my $prefix = "/usr/local";
 my $showHelp = 0;
 my $etc_conf = "/etc/jakobmenu.conf";
 my $home_conf = "~/.config/jakobmenu/conf";
-my $libbsdroot = undef;
 
 my $cflags = $ENV{CFLAGS} || "";
 my $ldflags = $ENV{LDFLAGS} || "";
@@ -27,8 +26,7 @@ my $ldflags = $ENV{LDFLAGS} || "";
 GetOptions("prefix=s" => \$prefix,
            "help" => \$showHelp,
            "etc_conf=s" => \$etc_conf,
-           "home_conf=s" => \$home_conf,
-           "libbsd_root=s" => \$libbsdroot)
+           "home_conf=s" => \$home_conf)
            or die("Error parsing command line");
 
 if($showHelp) {
@@ -41,12 +39,6 @@ $0 [-prefix=/usr/local]
                                            a quoted ~ will be expanded
                                            to the user's home directory
                                            at runtime.
-    -libbsd_root=/home/user/libbsd         if your system doesn't have
-                                           native support for sys/tree.h,
-                                           consider libbsd; if you can't
-                                           install it system-wide, use
-                                           this flag to point it to where
-                                           it is implemented
 
 This script generates Makefile.vars and config.h to generate sensible
 defaults based on what is detected in the environment, or your whims.
@@ -209,118 +201,6 @@ EOT
 });
 
 
-my $treeCode = <<EOT;
-#include <sys/tree.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-struct node {
-    RB_ENTRY(node) entry;
-    int i;
-};
-
-int intcmp(struct node *, struct node *);
-void    print_tree(struct node *);
-
-int
-intcmp(struct node *e1, struct node *e2)
-{
-    return (e1->i < e2->i ? -1 : e1->i > e2->i);
-}
-
-RB_HEAD(inttree, node) head = RB_INITIALIZER(&head);
-RB_PROTOTYPE(inttree, node, entry, intcmp)
-RB_GENERATE(inttree, node, entry, intcmp)
-
-int testdata[] = {
-    20, 16, 17, 13, 3, 6, 1, 8, 2, 4, 10, 19, 5, 9, 12, 15, 18,
-    7, 11, 14
-};
-
-void
-print_tree(struct node *n)
-{
-    struct node *left, *right;
-
-    if (n == NULL) {
-        printf("nil");
-        return;
-    }
-    left = RB_LEFT(n, entry);
-    right = RB_RIGHT(n, entry);
-    if (left == NULL && right == NULL)
-        printf("%d", n->i);
-    else {
-        printf("%d(", n->i);
-        print_tree(left);
-        printf(",");
-        print_tree(right);
-        printf(")");
-    }
-}
-
-int
-main(void)
-{
-    int i;
-    struct node *n;
-
-    for (i = 0; i < sizeof(testdata) / sizeof(testdata[0]); i++) {
-        if ((n = malloc(sizeof(struct node))) == NULL)
-            exit(2);
-        n->i = testdata[i];
-        RB_INSERT(inttree, &head, n);
-    }
-
-    RB_FOREACH(n, inttree, &head) {
-        printf("%d\\n", n->i);
-    }
-    print_tree(RB_ROOT(&head));
-    printf("\\n");
-    return (0);
-}
-EOT
-
-my $systreehinclude = "#include <sys/tree.h>";
-if(!defined($libbsdroot)) {
-    if(!compile("for native sys/tree.h", $treeCode, "$cc $cflags", sub {
-        my ($compiles, $status) = @_;
-    
-        return $compiles && ($status == 0);
-    }, $ldflags)) {
-        $treeCode =~ s|#include <sys/tree\.h>|#include <bsd/sys/tree.h>|;
-        if(compile("for bsd/sys/tree.h with libbsd", $treeCode, "$cc", sub {
-            my ($compiles, $status) = @_;
-    
-            return $compiles && ($status == 0);
-        }, "-lbsd")) {
-            $systreehinclude = "#include <bsd/sys/tree.h>";
-            $ldflags .= " -lbsd";
-        } else {
-            die("Can't find sys/tree.h");
-        }
-    }
-} else {
-    $treeCode =~ s|#include <sys/tree\.h>|#include <bsd/sys/tree.h>|;
-    if(!compile("for sys/tree.h with \$libbsdroot", $treeCode, "$cc $cflags -isystem$libbsdroot/include -DLIBBSD_OVERLAY ", sub {
-        my ($compiles, $status) = @_;
-    
-        return $compiles && ($status == 0);
-    }, $ldflags." -L$libbsdroot/lib -lbsd ")) {
-        die("Can't find sys/tree.h");
-    } else {
-        $systreehinclude = "#include <bsd/sys/tree.h>";
-        $cflags .= " -DLIBBSD_OVERLAY -isystem$libbsdroot/include";
-        $ldflags .= " -L$libbsdroot -lbsd";
-    }
-}
-
-
-# TODO prompt user to install libbsd
-# TODO add flag to specify where libbsd is located
-
-
-
 ####################################################################
 # write output
 ####################################################################
@@ -337,9 +217,11 @@ print A <<EOT;
 #ifndef CONFIG_H
 #define CONFIG_H
 
-$defines{ERRH}
+#ifndef _POSIX_C_SOURCE
+# define _POSIX_C_SOURCE 200809L
+#endif
 
-$systreehinclude
+$defines{ERRH}
 
 #define HAVE_PLEDGE $defines{HAVE_PLEDGE}
 #define HAVE_UNVEIL $defines{HAVE_UNVEIL}
