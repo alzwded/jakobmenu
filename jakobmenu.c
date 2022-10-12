@@ -32,6 +32,9 @@ struct entry {
     SLIST_ENTRY(entry) entries;
 };
 
+static char* menuId = "jakobmenu-1";
+static char* menuTitle = "jakobmenu";
+
 static char* expand(const char* path)
 {
     if(!path || !*path) return NULL;
@@ -204,13 +207,82 @@ end1:
     free(expandedPath);
 }
 
+static void parseDotDesktop(const char* path)
+{
+    FILE* f = fopen(path, "r");
+    if(!f)
+        return;
+
+    char *Name = NULL, *Exec = NULL, *Icon = NULL;
+    char *Categories = NULL, *Path = NULL;
+    int isOk = 1, useTerminal = 0;
+
+    while(!feof(f)) {
+        size_t lineCap = 128;
+        char* line = malloc(lineCap);
+        size_t lineLen = 0;
+        int c = 0;
+        line[0] = '\0';
+        do {
+            c = fgetc(f);
+            if(c < 0 || feof(f) || c == '\n') break;
+            line[lineLen++] = (c & 0xFF);
+            if(lineLen >= lineCap) {
+                lineCap *= 2;
+                line = realloc(line, lineCap);
+            }
+        } while(1);
+        line[lineLen] = '\0';
+
+        char *key = NULL, *value = NULL;
+        if(splitByEquals(line, &key, &value)) {
+            if(strcmp(key, "Type") == 0) {
+                isOk = isOk && (strcmp(value, "Application") == 0);
+            } else if(strcmp(key, "Hidden") == 0) {
+                isOk = isOk && (strcmp(value, "true") != 0);
+            } else if(strcmp(key, "NoDisplay") == 0) {
+                isOk = isOk && (strcmp(value, "true") != 0);
+            } else if(strcmp(key, "Name") == 0) {
+                Name = strdup(value);
+            } else if(strcmp(key, "Icon") == 0) {
+                Icon = strdup(value);
+            } else if(strcmp(key, "Exec") == 0) {
+                Exec = strdup(value);
+            } else if(strcmp(key, "Categories") == 0) {
+                Categories = strdup(value);
+            } else if(strcmp(key, "Path") == 0) {
+                Path = strdup(value);
+            } else if(strcmp(key, "Terminal") == 0) {
+                useTerminal = (strcmp(value, "true") == 0);
+            }
+        }
+
+        free(line);
+    }
+
+    if(isOk) {
+        printf("  <item label=\"%s\"><action name=\"Execute\"><execute>"
+                "%s</execute></action></item>\n",
+                Name,
+                Exec);
+    }
+
+    free(Name);
+    free(Exec);
+    free(Icon);
+    free(Categories);
+    free(Path);
+
+ret1:
+    fclose(f);
+}
+
 static void parseAll()
 {
     struct entry *np = NULL;
     for(np = SLIST_FIRST(&dirs); np != NULL; np = SLIST_NEXT(np, entries)) {
         DIR* dir;
         struct dirent* dep = NULL;
-        printf("%s\n", np->path);
         dir = opendir(np->path);
         if(!dir) continue;
         while((dep = readdir(dir)) != NULL) {
@@ -225,7 +297,7 @@ static void parseAll()
                 strcpy(fullPath, np->path);
                 if(!endsInSlash) strcat(fullPath, "/");
                 strcat(fullPath, dep->d_name);
-                printf("%s\n", fullPath);
+                parseDotDesktop(fullPath);
                 free(fullPath);
             }
         }
@@ -291,6 +363,10 @@ int main(int argc, char* argv[])
 #endif
 
     // parse command line
+    // TODO
+    // - add command line flag for menu name
+    // - add command line flag to create submenus per categories, or per top level path
+    // - add rc commands for the above
     int ch;
     while((ch = getopt(argc, argv, "hVp:")) != -1) {
         switch(ch) {
@@ -328,12 +404,19 @@ int main(int argc, char* argv[])
     pledge(NULL, NULL);
 #endif
 
+    printf("<openbox_pipe_menu>\n");
+
+    printf(" <menu id=\"%s\" label=\"%s\">\n", menuId, menuTitle);
+
     // parse rc files
     parseRC(ETC_CONF);
     parseRC(HOME_CONF);
 
     // parse all files
     parseAll();
+
+    printf(" </menu>\n");
+    printf("</openbox_pipe_menu>\n");
 
     return 0;
 }
