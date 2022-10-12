@@ -370,19 +370,23 @@ int main(int argc, char* argv[])
 
 #if HAVE_PLEDGE
     // pledges
-    if(pledge("stdio rpath", NULL))
+    if(pledge("stdio rpath unveil", NULL))
         err(1, "Failed to pledge");
 #endif
+
+    char* realHomeConf = expand(HOME_CONF);
 
 #if HAVE_UNVEIL
     // unveil rc files
     unveil(ETC_CONF, "r");
-    unveil(HOME_CONF, "r");
+    unveil(realHomeConf, "r");
 #endif
 
     // parse rc files
     parseRC(ETC_CONF);
-    parseRC(HOME_CONF);
+    parseRC(realHomeConf);
+
+    free(realHomeConf);
 
     // parse command line
     // TODO
@@ -425,12 +429,12 @@ int main(int argc, char* argv[])
 
     printf("<openbox_pipe_menu>\n");
 
-    printf(" <menu id=\"%s\" label=\"%s\">\n", menuId, menuTitle);
+    //printf(" <menu id=\"%s\" label=\"%s\">\n", menuId, menuTitle);
 
     // parse all files
     parseAll();
 
-    printf(" </menu>\n");
+    //printf(" </menu>\n");
     printf("</openbox_pipe_menu>\n");
 
     return 0;

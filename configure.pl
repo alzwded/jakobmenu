@@ -221,6 +221,10 @@ print A <<EOT;
 # define _POSIX_C_SOURCE 200809L
 #endif
 
+#ifndef _BSD_SOURCE
+# define _BSD_SOURCE
+#endif
+
 $defines{ERRH}
 
 #define HAVE_PLEDGE $defines{HAVE_PLEDGE}

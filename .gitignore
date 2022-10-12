@@ -3,3 +3,8 @@ jakobmenu
 a.out
 test.c
 config.h
+*.tmp
+*.o
+*.out
+*.log
+*.core
