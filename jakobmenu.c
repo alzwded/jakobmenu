@@ -32,6 +32,101 @@ struct entry {
     SLIST_ENTRY(entry) entries;
 };
 
+struct item {
+    char *Name, *Exec, *Category, *Icon, *Path;
+    int useTerminal;
+};
+#define INIT_ITEM(p) do{\
+    memset(p, 0, sizeof(struct item));\
+}while(0)
+
+struct item* new_item(
+        char* Name,
+        char* Exec,
+        char* Category,
+        char* Icon,
+        char* Path,
+        int useTerminal)
+{
+    struct item* rval = malloc(sizeof(struct item));
+    INIT_ITEM(rval);
+    assert(Name);
+    assert(Exec);
+    rval->Name = Name;
+    rval->Exec = Exec;
+    if(Category)
+        rval->Category = Category;
+    else
+        rval->Category = strdup("Misc");
+    if(Icon) rval->Icon = Icon;
+    if(Path) rval->Path = Path;
+    rval->useTerminal = useTerminal;
+    return rval;
+}
+
+#define DEFAULT_CAPACITY 2
+size_t ccategories = DEFAULT_CAPACITY;
+struct category {
+    char* name;
+    size_t cmembers, nmembers;
+    struct item **members;
+} **categories = NULL;
+size_t ncategories = 0;
+#define INIT_CATEGORY(p) do{\
+    memset(p, 0, sizeof(struct category));\
+    p->cmembers = DEFAULT_CAPACITY;\
+    p->nmembers = 0;\
+    p->members = calloc(p->cmembers, sizeof(struct item*));\
+}while(0)
+
+int compare_categories(const void* left, const void* right)
+{
+    assert(left);
+    assert(right);
+
+    return strcmp((*(struct category**)left)->name, (*(struct category**)right)->name);
+}
+
+int compare_items(const void* left, const void* right)
+{
+    assert(left);
+    assert(right);
+
+    return strcmp((*(struct item**)left)->Name, (*(struct item**)right)->Name);
+}
+
+struct category* append_category(const char* name) 
+{
+    if(ncategories >= ccategories) {
+        ccategories *= 2;
+        categories = realloc(categories, ccategories * sizeof(struct category*));
+    }
+    categories[ncategories] = malloc(sizeof(struct category));
+    INIT_CATEGORY(categories[ncategories]);
+    categories[ncategories]->name = strdup(name);
+    ncategories++;
+    return categories[ncategories-1];
+}
+
+#define ADD_MEMBER(CATEGORY, newMember) do{\
+    if(CATEGORY->nmembers >= CATEGORY->cmembers) {\
+        CATEGORY->cmembers *= 2;\
+        CATEGORY->members = realloc(CATEGORY->members, CATEGORY->cmembers * sizeof(struct item*));\
+    }\
+    CATEGORY->members[CATEGORY->nmembers++] = newMember;\
+}while(0)
+
+struct category* get_category(const char* category)
+{
+    for(int i = 0; i < ncategories; ++i) {
+        if(strcmp(categories[i]->name, category) == 0) {
+            return categories[i];
+        }
+    }
+    return NULL;
+}
+
+
 static char* menuId = "jakobmenu-1";
 static char* menuTitle = "jakobmenu";
 
@@ -207,6 +302,16 @@ end1:
     free(expandedPath);
 }
 
+static int sectionType(const char* line)
+{
+    while(*line && isspace(*line)) {
+        line++;
+    }
+    if(*line != '[') return 0;
+    if(strncmp("[Desktop Entry]", line, strlen("[Desktop Entry]")) == 0) return 1;
+    return 2;
+}
+
 static void parseDotDesktop(const char* path)
 {
     FILE* f = fopen(path, "r");
@@ -217,7 +322,9 @@ static void parseDotDesktop(const char* path)
     char *Categories = NULL, *Path = NULL;
     int isOk = 1, useTerminal = 0;
 
-    while(!feof(f)) {
+    int foundDesktopEntry = 0;
+
+    while(!feof(f) && foundDesktopEntry < 2) {
         size_t lineCap = 128;
         char* line = malloc(lineCap);
         size_t lineLen = 0;
@@ -241,8 +348,22 @@ static void parseDotDesktop(const char* path)
         } while(!feof(f));
         line[lineLen] = '\0';
 
+        switch(sectionType(line)) {
+            default:
+            case 0:
+                break;
+            case 1:
+                foundDesktopEntry = 1;
+                break;
+            case 2:
+                if(foundDesktopEntry) {
+                    foundDesktopEntry = 2;
+                }
+                break;
+        }
+
         char *key = NULL, *value = NULL;
-        if(splitByEquals(line, &key, &value)) {
+        if(foundDesktopEntry == 1 && splitByEquals(line, &key, &value)) {
             if(strcmp(key, "Type") == 0) {
                 isOk = isOk && (strcmp(value, "Application") == 0);
             } else if(strcmp(key, "Hidden") == 0) {
@@ -273,18 +394,24 @@ static void parseDotDesktop(const char* path)
         free(line);
     }
 
-    if(isOk) {
-        printf("  <item label=\"%s\"><action name=\"Execute\"><execute>"
-                "%s</execute></action></item>\n",
-                Name,
-                Exec);
-    }
+    isOk = isOk && Name && Exec;
 
-    free(Name);
-    free(Exec);
-    free(Icon);
-    free(Categories);
-    free(Path);
+    if(isOk) {
+        char* foundSemicolon = Categories ? strchr(Categories, ';') : NULL;
+        if(foundSemicolon) *foundSemicolon = '\0';
+        struct item* item = new_item(Name, Exec, Categories, Icon, Path, useTerminal);
+        struct category* category = get_category(item->Category);
+        if(!category) {
+            category = append_category(item->Category);
+        }
+        ADD_MEMBER(category, item);
+    } else {
+        free(Name);
+        free(Exec);
+        free(Categories);
+        free(Icon);
+        free(Path);
+    }
 
     fclose(f);
 }
@@ -427,14 +554,27 @@ int main(int argc, char* argv[])
     pledge(NULL, NULL);
 #endif
 
-    printf("<openbox_pipe_menu>\n");
-
-    //printf(" <menu id=\"%s\" label=\"%s\">\n", menuId, menuTitle);
+    categories = calloc(DEFAULT_CAPACITY, sizeof(struct category*));
 
     // parse all files
     parseAll();
+    qsort(categories, ncategories, sizeof(struct category*), &compare_categories);
 
+    //printf(" <menu id=\"%s\" label=\"%s\">\n", menuId, menuTitle);
     //printf(" </menu>\n");
+    printf("<openbox_pipe_menu>\n");
+    for(int i = 0; i < ncategories; ++i) {
+        struct category *category = categories[i];
+        printf(" <menu id=\"%s\" label=\"%s\">\n", category->name, category->name);
+        qsort(category->members, category->nmembers, sizeof(struct item*), &compare_items);
+        for(int j = 0; j < category->nmembers; ++j) {
+            printf("  <item label=\"%s\"><action name=\"Execute\"><execute>"
+                    "%s</execute></action></item>\n",
+                    category->members[j]->Name,
+                    category->members[j]->Exec);
+        }
+        printf(" </menu>\n");
+    }
     printf("</openbox_pipe_menu>\n");
 
     return 0;
