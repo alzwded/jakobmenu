@@ -580,10 +580,19 @@ int main(int argc, char* argv[])
         printf(" <menu id=\"%s\" label=\"%s\">\n", category->name, category->name);
         qsort(category->members, category->nmembers, sizeof(struct item*), &compare_items);
         for(int j = 0; j < category->nmembers; ++j) {
+            char* buffer = NULL;
+            const char* toExec = category->members[j]->Exec;
+            if(category->members[j]->useTerminal) {
+                buffer = malloc(strlen(toExec) + strlen("xterm -e ") + 1);
+                strcpy(buffer, "xterm -e ");
+                strcat(buffer, toExec);
+                toExec = buffer;
+            }
             printf("  <item label=\"%s\"><action name=\"Execute\"><execute>"
                     "%s</execute></action></item>\n",
                     category->members[j]->Name,
-                    category->members[j]->Exec);
+                    toExec);
+            free(buffer);
         }
         printf(" </menu>\n");
     }
