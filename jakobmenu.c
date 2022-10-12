@@ -279,7 +279,6 @@ static void parseDotDesktop(const char* path)
     free(Categories);
     free(Path);
 
-ret1:
     fclose(f);
 }
 
