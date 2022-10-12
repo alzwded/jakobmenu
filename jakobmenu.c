@@ -377,8 +377,20 @@ static void parseDotDesktop(const char* path)
             } else if(strcmp(key, "Exec") == 0) {
                 char* ss = NULL;
                 Exec = strdup(value);
-                // strip %U, openbox cannot provide that
+                // strip %U, %u, %f, openbox cannot provide that
                 while((ss = strstr(Exec, "%U")) != NULL) {
+                    ss[0] = ' ';
+                    ss[1] = ' ';
+                }
+                while((ss = strstr(Exec, "%u")) != NULL) {
+                    ss[0] = ' ';
+                    ss[1] = ' ';
+                }
+                while((ss = strstr(Exec, "%F")) != NULL) {
+                    ss[0] = ' ';
+                    ss[1] = ' ';
+                }
+                while((ss = strstr(Exec, "%f")) != NULL) {
                     ss[0] = ' ';
                     ss[1] = ' ';
                 }
