@@ -51,31 +51,50 @@ EOT
     exit(1);
 }
 
+sub compile {
+    my ($what, $ccode, $cc, $lambda) = @_;
+
+    print "Checking $what...\n";
+    open A, ">test.c";
+    print A $ccode;
+
+    my $compiles = system("$cc test.c") ? 0 : 1;
+    my $exitCode = -1;
+    if($compiles) {
+        $exitCode = system("./a.out") >> 8;
+    }
+
+    close A;
+    unlink("test.c");
+    unlink("a.out");
+
+    return &$lambda($compiles, $exitCode);
+}
+
+####################################################################
+# checks
+####################################################################
+
 sub tryCompiler {
     my ($cc) = @_;
 
-    # TODO check if compiler is $CC, cc, gcc, clang, etc...
-    print "Checking compiler works...\n";
-    open A, ">test.c";
-    # TODO check actual pledges work...
-    print A <<EOT;
+    my $ccode = <<EOT;
 #include <stdio.h>
 int main(int argc, char* argv[]) {
     printf("Hello, world!\\n");
     return 0;
 }
 EOT
-    close(A);
-    
-    my $compilerOk = system("$cc test.c && ./a.out") ? 0 : 1;
-    unlink("test.c");
-    unlink("a.out");
 
-    return $compilerOk;
+    return compile("$cc", $ccode, $cc, sub {
+        my ($compiles, $status) = @_;
+        return $compiles && $status == 0;
+    })
 }
 
 my $compiler = undef;
 
+print("Trying to find a C compiler...\n");
 foreach my $cc ($ENV{CC}, 'cc', 'gcc', 'clang') {
     next if !defined($cc);
     next if !tryCompiler($cc);
@@ -85,42 +104,31 @@ foreach my $cc ($ENV{CC}, 'cc', 'gcc', 'clang') {
 
 die("Can't rely on compiler") if not $compiler;
 
-print "Checking for pledge...\n";
-open A, ">test.c";
-# TODO check actual pledges work...
-print A <<EOT;
+my $pledgeCode = <<EOT;
 #include <unistd.h>
 int main(int argc, char* argv[]) {
     pledge(NULL, NULL);
     return 0;
 }
 EOT
-close(A);
+compile("for pledge", $pledgeCode, $compiler, sub {
+    my ($compiles, $status) = @_;
+    $defines{HAVE_PLEDGE} = ($compiles && $status == 0) ? 1 : 0;
+});
 
-$defines{HAVE_PLEDGE} = system("$compiler test.c && ./a.out") ? 0 : 1;
-unlink("test.c");
-unlink("a.out");
-
-
-print "Checking for unveil...\n";
-open A, ">test.c";
-print A <<EOT;
+my $unveilCode = <<EOT;
 #include <unistd.h>
 int main(int argc, char* argv[]) {
     unveil(NULL, NULL);
     return 0;
 }
 EOT
-close(A);
+compile("for unveil", $unveilCode, $compiler, sub {
+    my ($compiles, $status) = @_;
+    $defines{HAVE_UNVEIL} = ($compiles && $status == 0) ? 1 : 0;
+});
 
-$defines{HAVE_UNVEIL} = system("$compiler test.c && ./a.out") ? 0 : 1;
-unlink("test.c");
-unlink("a.out");
-
-# TODO check err.h or fake it
-print("Checking for err...\n");
-open A, ">test.c";
-print A <<EOT;
+my $errhCode = <<EOT;
 #include <err.h>
 #include <errno.h>
 int main(int argc, char* argv[]) {
@@ -130,16 +138,10 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 EOT
-close(A);
-if(system("$compiler test.c") > 0) {
-    $defines{HAVE_GOOD_ERR} = 0;
-} else {
-    $defines{HAVE_GOOD_ERR} = (system("./a.out") >> 8) == 126 ? 1 : 0;
-}
-unlink("test.c");
-unlink("a.out");
-
-my $errh = $defines{HAVE_GOOD_ERR} ? "#include <err.h>" : <<EOT;
+compile("for err() and warn()", $errhCode, $compiler, sub {
+    my ($compiles, $status) = @_;
+    my $include = "#include <err.h>";
+    my $fake = <<EOT;
 #define err(eval, fmt, ...) do{\\
 if(errno) {\\
 fprintf(stderr, "ERR: " fmt ": %d\n",##__VA_ARGS__, errno);\\
@@ -150,6 +152,14 @@ exit((eval));\\
 fprintf(stderr, "WARN: " fmt ": %d\n",##__VA_ARGS__, errno);\\
 }while(0)
 EOT
+    $defines{ERRH} = ($compiles && $status == 126) ? $include : $fake;
+});
+
+
+
+####################################################################
+# write output
+####################################################################
 
 my $systempaths = <<EOT;
 #define ETC_CONF "$etc_conf"
@@ -163,7 +173,7 @@ print A <<EOT;
 #ifndef CONFIG_H
 #define CONFIG_H
 
-$errh
+$defines{ERRH}
 
 #define HAVE_PLEDGE $defines{HAVE_PLEDGE}
 #define HAVE_UNVEIL $defines{HAVE_UNVEIL}
