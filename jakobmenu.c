@@ -84,6 +84,45 @@ static void addPath(const char* path)
     SLIST_INSERT_HEAD(&dirs, e, entries);
 }
 
+/**
+ * splitByEquals
+ *
+ * Splits a line that looks like key=value into key and value.
+ * This function does not allocate memory.
+ * This function WILL touch line.
+ *
+ * line     the input line
+ * key      text up to the first =, stripped of leading and trailing spaces
+ * value    text after the first =, stripped of leading and trailing spaces
+ * @returns 1 if there was an =, 0 if it couldn't parse
+ */
+static int splitByEquals(char* line, char** key, char**value)
+{
+    char* equals = strchr(line, '=');
+
+    if(!equals)
+        return 0;
+
+    char* valueTail = NULL;
+    *value = equals + 1;
+    valueTail = equals + strlen(equals);
+    while(**value && isspace(**value))
+        (*value)++;
+    while(valueTail > *value && isspace(*(valueTail - 1)))
+        --valueTail;
+    *valueTail = '\0';
+
+    *equals = '\0';
+    *key = line;
+    while(**key && isspace(**key))
+        (*key)++;
+    while(equals > *key && isspace(*(equals - 1)))
+        --equals;
+    *equals = '\0';
+
+    return 1;
+}
+
 static void parseRC(const char* path)
 {
     char* expandedPath = expand(path);
@@ -130,9 +169,7 @@ static void parseRC(const char* path)
 
         // process line
         char* key = NULL, *value = NULL;
-
-        char* equals = strchr(line, '=');
-        if(!equals) {
+        if(!splitByEquals(line, &key, &value)) {
             int i = 0;
 
             for(i = 0; i < strlen(line); ++i) {
@@ -145,24 +182,7 @@ static void parseRC(const char* path)
 
             free(line);
             continue;
-        } else { // if(!equals)
-            char* valueTail = NULL;
-            value = equals + 1;
-            valueTail = equals + strlen(equals);
-            while(*value && isspace(*value))
-                value++;
-            while(valueTail > value && isspace(*(valueTail - 1)))
-                --valueTail;
-            *valueTail = '\0';
-
-            *equals = '\0';
-            key = line;
-            while(*key && isspace(*key))
-                key++;
-            while(equals > key && isspace(*(equals - 1)))
-                --equals;
-            *equals = '\0';
-
+        } else { // if(splitByEquals...)
             if(strcmp(key, "path") == 0) {
                 addPath(value);
                 free(line);
