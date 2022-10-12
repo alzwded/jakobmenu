@@ -17,4 +17,6 @@ install: jakobmenu
 uninstall:
 	rm -f "${PREFIX}/bin/jakobmenu"
 	rm -f "${PREFIX}/share/jakobmenu/jakobmenu.conf"
+	rmdir "${PREFIX}/share/jakobmenu" || true
 	rm -f "${PREFIX}/share/doc/jakobmenu/README.md"
+	rmdir "${PREFIX}/share/doc/jakobmenu" || true
