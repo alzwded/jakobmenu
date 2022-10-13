@@ -274,6 +274,7 @@ static void parseRC(const char* path)
         assert(line);
         int lineLen = 0;
         line[lineLen] = '\0';
+        // read a line
         do {
             int c = fgetc(f);
             if(feof(f) || c < 0 || c == '\n') break;
@@ -283,6 +284,7 @@ static void parseRC(const char* path)
                 if(feof(f) || c < 0) break;
             }
 
+            // comment -- ignore rest of line
             if(c == '#') {
                 do {
                     c = fgetc(f);
@@ -292,7 +294,7 @@ static void parseRC(const char* path)
             }
 
             line[lineLen++] = (char)(c & 0xFF);
-            if(lineLen >= lineCap) {
+            if(lineLen >= lineCap - 1/*terminator*/) {
                 lineCap *= 2;
                 line = (char*)realloc(line, lineCap);
                 assert(line);
@@ -301,11 +303,12 @@ static void parseRC(const char* path)
         lineNo++;
         line[lineLen] = '\0';
 
-        // process line
+        // parse line
         char* key = NULL, *value = NULL;
         if(!splitByEquals(line, &key, &value)) {
             int i = 0;
 
+            // determine if it's a syntax error or whitespace/comments
             for(i = 0; i < strlen(line); ++i) {
                 if(isspace(line[i])) continue;
                 free(line);
@@ -367,10 +370,16 @@ static void parseDotDesktop(const char* path)
     if(!f)
         return;
 
+    // information extracted from a .desktop file
     char *Name = NULL, *Exec = NULL, *Icon = NULL;
     char *Categories = NULL, *Path = NULL;
     int isOk = 1, useTerminal = 0;
+    // isOk will be set to 0 if it's something we shouldn't/can't show
 
+    // state machine:
+    // 0 - ignore everything until [Desktop Entry] is encountered
+    // 1 - extract Name, Exec etc
+    // 2 - different section, ignore
     int foundDesktopEntry = 0;
 
     while(!feof(f) && foundDesktopEntry < 2) {
@@ -379,9 +388,11 @@ static void parseDotDesktop(const char* path)
         size_t lineLen = 0;
         int c = 0;
         line[0] = '\0';
+        // read a line
         do {
             c = fgetc(f);
             if(c < 0 || feof(f) || c == '\n') break;
+            // comment -- ignore everything until end of line
             if(c == '#') {
                 do {
                     c = fgetc(f);
@@ -390,13 +401,15 @@ static void parseDotDesktop(const char* path)
                 break;
             }
             line[lineLen++] = (c & 0xFF);
-            if(lineLen >= lineCap) {
+            if(lineLen >= lineCap - 1/*terminator*/) {
                 lineCap *= 2;
                 line = realloc(line, lineCap);
             }
         } while(!feof(f));
+        // add terminator
         line[lineLen] = '\0';
 
+        // see foundDesktopEntry
         switch(sectionType(line)) {
             default:
             case 0:
@@ -411,6 +424,7 @@ static void parseDotDesktop(const char* path)
                 break;
         }
 
+        // parse statements
         char *key = NULL, *value = NULL;
         if(foundDesktopEntry == 1 && splitByEquals(line, &key, &value)) {
             if(strcmp(key, "Type") == 0) {
@@ -455,12 +469,16 @@ static void parseDotDesktop(const char* path)
         free(line);
     }
 
+    // if we're ok and we have at least Name and Exec...
     isOk = isOk && Name && Exec;
 
     if(isOk) {
+        // grab first category
         char* foundSemicolon = Categories ? strchr(Categories, ';') : NULL;
         if(foundSemicolon) *foundSemicolon = '\0';
+        // create a menu item
         struct item* item = new_item(Name, Exec, Categories, Icon, Path, useTerminal);
+        // add it to its main categories
         struct category* category = get_category(item->Category);
         if(!category) {
             category = append_category(item->Category);
@@ -468,6 +486,7 @@ static void parseDotDesktop(const char* path)
         ADD_MEMBER(category, item);
 
         if(useAllCategories) {
+            // also add it to all other categories
             while(foundSemicolon != NULL) {
                 char* base = foundSemicolon + 1;
                 foundSemicolon = strchr(base, ';');
