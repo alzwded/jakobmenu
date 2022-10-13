@@ -23,6 +23,11 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 #include <sys/queue.h>
 #include <sys/types.h>
 
+// turn to 1 if running a mem checker or something
+#ifndef DELETE_CATEGORIES
+# define DELETE_CATEGORIES 0
+#endif
+
 extern char* optarg;
 extern int opterr, optind, optopt;
 
@@ -66,6 +71,17 @@ struct item* new_item(
     return rval;
 }
 
+void delete_item(struct item** item)
+{
+    free((*item)->Name);
+    free((*item)->Exec);
+    free((*item)->Category);
+    free((*item)->Icon);
+    free((*item)->Path);
+    free(*item);
+    *item = NULL;
+}
+
 #define DEFAULT_CAPACITY 2
 size_t ccategories = DEFAULT_CAPACITY;
 struct category {
@@ -80,6 +96,22 @@ size_t ncategories = 0;
     p->nmembers = 0;\
     p->members = calloc(p->cmembers, sizeof(struct item*));\
 }while(0)
+
+void delete_category(struct category** category)
+{
+    struct item** end = (*category)->members + (*category)->nmembers;
+    for(struct item** p = (*category)->members; p != end; ++p) {
+        if(strcmp((*p)->Category, (*category)->name) == 0) {
+            delete_item(p);
+        } else {
+            *p = NULL;
+        }
+    }
+    free((*category)->name);
+    free((*category)->members);
+    free(*category);
+    *category = NULL;
+}
 
 int compare_categories(const void* left, const void* right)
 {
@@ -635,6 +667,12 @@ int main(int argc, char* argv[])
         printf(" </menu>\n");
     }
     printf("</openbox_pipe_menu>\n");
+
+#if DELETE_CATEGORIES
+    for(struct category** p = categories; p != categories + ncategories; ++p) {
+        delete_category(p);
+    }
+#endif
 
     return 0;
 }
