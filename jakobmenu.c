@@ -28,6 +28,8 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 # define DELETE_CATEGORIES 0
 #endif
 
+#define OPTSTRING "hVp:a"
+
 extern char* optarg;
 extern int opterr, optind, optopt;
 
@@ -522,16 +524,38 @@ static void parseAll()
     }
 }
 
-void version()
+void version(int yesexit)
 {
-    fprintf(stderr, "TODO version\n");
-    // TODO use err
-    exit(2);
+    fprintf(stderr,
+"jakobmenu %s -- An openbox pipe menu that parses .desktop files" "\n"
+        , VERSION
+        );
+    if(yesexit) exit(2);
 }
 
-void usage()
+void usage(const char* argv0)
 {
-    fprintf(stderr, "TODO usage\n");
+    version(0);
+    fprintf(stderr,
+"" "\n"
+"Usage: %s [-%s]" "\n"
+"\t"    "-h                     prints this message and exits" "\n"
+"\t"    "-V                     prints version information and exits" "\n"
+"\t"    "-a                     duplicate items in all declared categories" "\n"
+"\t"    "-p /some/path/         add a search path" "\n"
+"" "\n"
+"This program will output an <openbox_pipe_menu/> structure compatible" "\n"
+"with OpenBox." "\n"
+"" "\n"
+"See %s%s." "\n"
+"" "\n"
+"A sample configuration file should be available here: \n"
+"\t"    "%s%s" "\n"
+"" "\n"
+        , argv0, OPTSTRING
+        , PREFIX, "/share/doc/jakobmenu/README.md"
+        , PREFIX, "/share/jakobmenu/jakobmenu.conf"
+        );
     // TODO use err
     exit(2);
 }
@@ -600,14 +624,14 @@ int main(int argc, char* argv[])
     // - add rc commands for the above
     // - add command line flag to skip parsing config files, and change the order we parse things in... pfff
     int ch;
-    while((ch = getopt(argc, argv, "hVp:a")) != -1) {
+    while((ch = getopt(argc, argv, OPTSTRING)) != -1) {
         switch(ch) {
             // FIXME this should probably be handled before calls to parseRC...
             case 'h':
-                usage();
+                usage(argv[0]);
                 break;
             case 'V':
-                version();
+                version(1);
                 break;
             case 'p':
                 addPath(optarg);
@@ -616,7 +640,7 @@ int main(int argc, char* argv[])
                 useAllCategories = 1;
                 break;
             default:
-                usage();
+                usage(argv[0]);
         }
     }
     argc -= optind;

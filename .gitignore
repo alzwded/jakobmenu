@@ -8,3 +8,9 @@ config.h
 *.out
 *.log
 *.core
+dist
+jakobmenu-*/*
+*.tar
+*.t?z
+*.tZ
+*.tX

@@ -23,6 +23,8 @@ my $home_conf = "~/.config/jakobmenu/conf";
 my $cflags = $ENV{CFLAGS} || "";
 my $ldflags = $ENV{LDFLAGS} || "";
 
+my $VERSION = "0.1";
+
 GetOptions("prefix=s" => \$prefix,
            "help" => \$showHelp,
            "etc_conf=s" => \$etc_conf,
@@ -225,6 +227,9 @@ print A <<EOT;
 # define _BSD_SOURCE
 #endif
 
+#define VERSION "$VERSION"
+#define PREFIX "$prefix"
+
 $defines{ERRH}
 
 #define HAVE_PLEDGE $defines{HAVE_PLEDGE}
@@ -244,5 +249,6 @@ CC = $compiler
 CFLAGS = $c99switch $cflags
 LDFLAGS = $ldflags
 PREFIX = $prefix
+VERSION = $VERSION
 EOT
 close(A);
