@@ -672,6 +672,11 @@ int main(int argc, char* argv[])
     for(struct category** p = categories; p != categories + ncategories; ++p) {
         delete_category(p);
     }
+    while(!SLIST_EMPTY(&dirs)) {
+        struct entry* n = SLIST_FIRST(&dirs);
+        SLIST_REMOVE_HEAD(&dirs, entries);
+        free(n);
+    }
 #endif
 
     return 0;
