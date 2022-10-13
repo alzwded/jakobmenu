@@ -28,7 +28,7 @@ my $VERSION = "0.1";
 GetOptions("prefix=s" => \$prefix,
            "help" => \$showHelp,
            "etc_conf=s" => \$etc_conf,
-           "home_conf=s" => \$home_conf)
+           "user_conf=s" => \$home_conf)
            or die("Error parsing command line");
 
 if($showHelp) {
