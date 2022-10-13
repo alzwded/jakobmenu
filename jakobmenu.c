@@ -26,6 +26,8 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 extern char* optarg;
 extern int opterr, optind, optopt;
 
+static int useAllCategories = 0;
+
 SLIST_HEAD(dirshead, entry) dirs;
 struct entry {
     const char* path;
@@ -282,9 +284,22 @@ static void parseRC(const char* path)
             continue;
         } else { // if(splitByEquals...)
             if(strcmp(key, "path") == 0) {
+                assert(value);
+                if(strlen(value) == 0) {
+                    fprintf(stderr, "Invalid syntax in file %s line %d: expected value\n", expandedPath, lineNo);
+                    goto end2;
+                }
                 addPath(value);
                 free(line);
                 continue;
+            } else if(strcmp(key, "useAllCategories") == 0) {
+                assert(value);
+                if(strlen(value) == 0) {
+                    fprintf(stderr, "Invalid syntax in file %s line %d: expected value\n", expandedPath, lineNo);
+                    goto end2;
+                }
+                int logicalValue = atoi(value);
+                useAllCategories = logicalValue != 0;
             } else {
                 free(line);
                 fprintf(stderr, "Invalid syntax in file %s line %d\n",
@@ -417,6 +432,25 @@ static void parseDotDesktop(const char* path)
             category = append_category(item->Category);
         }
         ADD_MEMBER(category, item);
+
+        if(useAllCategories) {
+            while(foundSemicolon != NULL) {
+                char* base = foundSemicolon + 1;
+                foundSemicolon = strchr(base, ';');
+                if(foundSemicolon) {
+                    *foundSemicolon = '\0';
+                }
+                // skip over BS
+                if(strlen(base) == 0) continue;
+                if(strstr(base, "X-") == base) continue;
+                if(strstr(base, "x-") == base) continue;
+                category = get_category(base);
+                if(!category) {
+                    category = append_category(base);
+                }
+                ADD_MEMBER(category, item);
+            }
+        }
     } else {
         free(Name);
         free(Exec);
@@ -534,7 +568,7 @@ int main(int argc, char* argv[])
     // - add rc commands for the above
     // - add command line flag to skip parsing config files, and change the order we parse things in... pfff
     int ch;
-    while((ch = getopt(argc, argv, "hVp:")) != -1) {
+    while((ch = getopt(argc, argv, "hVp:a")) != -1) {
         switch(ch) {
             // FIXME this should probably be handled before calls to parseRC...
             case 'h':
@@ -545,6 +579,9 @@ int main(int argc, char* argv[])
                 break;
             case 'p':
                 addPath(optarg);
+                break;
+            case 'a':
+                useAllCategories = 1;
                 break;
             default:
                 usage();
@@ -563,6 +600,7 @@ int main(int argc, char* argv[])
 
 #if HAVE_PLEDGE
     // no further pledges
+    pledge("stdio rpath", NULL);
     pledge(NULL, NULL);
 #endif
 
