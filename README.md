@@ -9,7 +9,7 @@ Building
 You need perl and a C99 compiler.
 
 ```sh
-./configure
+./configure.pl
 make
 make install
 ```
