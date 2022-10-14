@@ -8,19 +8,18 @@ clean:
 	rm -f jakobmenu
 
 distclean: clean
-	rm -f Makefile.vars config.h test.c a.out
+	rm -rf Makefile.vars config.h test.c a.out *.tgz ${DISTFOLDER}
 
 dist: jakobmenu
 	mkdir -p ${DISTFOLDER}
-	install -D -m 755 jakobmenu ${DISTFOLDER}/bin/jakobmenu
-	install -D -m 644 jakobmenu ${DISTFOLDER}/usr/share/jakobmenu/jakobmenu.conf
-	install -D -m 644 jakobmenu ${DISTFOLDER}/usr/share/doc/jakobmenu/README.md
-	install -D -m 644 jakobmenu.c ${DISTFOLDER}/src/jakobmenu.c
-	install -D -m 644 config.h ${DISTFOLDER}/src/config.h
-	install -D -m 755 configure.pl ${DISTFOLDER}/src/configure.pl
-	install -D -m 644 Makefile ${DISTFOLDER}/src/Makefile
-	install -D -m 644 Makefile.vars ${DISTFOLDER}/src/Makefile.vars
-	install -D -m 644 LICENSE ${DISTFOLDER}/src/LICENSE
+	install -D -m 644 jakobmenu.conf ${DISTFOLDER}/jakobmenu.conf
+	install -D -m 644 README.md ${DISTFOLDER}/README.md
+	install -D -m 644 jakobmenu.c ${DISTFOLDER}/jakobmenu.c
+	install -D -m 644 config.h ${DISTFOLDER}/config.h
+	install -D -m 755 configure.pl ${DISTFOLDER}/configure.pl
+	install -D -m 644 Makefile ${DISTFOLDER}/Makefile
+	install -D -m 644 Makefile.vars ${DISTFOLDER}/Makefile.vars
+	install -D -m 644 LICENSE ${DISTFOLDER}/LICENSE
 	tar cvzf ${DISTFOLDER}.tgz ${DISTFOLDER}
 
 install: jakobmenu
