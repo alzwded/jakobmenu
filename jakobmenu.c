@@ -684,8 +684,6 @@ int main(int argc, char* argv[])
     parseAll();
     qsort(categories, ncategories, sizeof(struct category*), &compare_categories);
 
-    //printf(" <menu id=\"%s\" label=\"%s\">\n", menuId, menuTitle);
-    //printf(" </menu>\n");
     printf("<openbox_pipe_menu>\n");
     for(int i = 0; i < ncategories; ++i) {
         struct category *category = categories[i];
