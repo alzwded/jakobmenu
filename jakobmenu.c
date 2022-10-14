@@ -638,7 +638,6 @@ int main(int argc, char* argv[])
 
     // parse command line
     // TODO
-    // - add command line flag for menu name
     // - add command line flag to create submenus per categories, or per top level path
     // - add rc commands for the above
     // - add command line flag to skip parsing config files, and change the order we parse things in... pfff
