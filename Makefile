@@ -10,7 +10,7 @@ clean:
 distclean: clean
 	rm -rf Makefile.vars config.h test.c a.out *.tgz ${DISTFOLDER}
 
-dist: jakobmenu
+dist:
 	mkdir -p ${DISTFOLDER}
 	install -D -m 644 jakobmenu.conf ${DISTFOLDER}/jakobmenu.conf
 	install -D -m 644 README.md ${DISTFOLDER}/README.md
