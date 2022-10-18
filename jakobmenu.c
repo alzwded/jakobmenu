@@ -73,7 +73,7 @@ struct item* new_item(
     return rval;
 }
 
-void delete_item(struct item** item)
+static inline void delete_item(struct item** item)
 {
     free((*item)->Name);
     free((*item)->Exec);
@@ -99,7 +99,7 @@ size_t ncategories = 0;
     p->members = calloc(p->cmembers, sizeof(struct item*));\
 }while(0)
 
-void delete_category(struct category** category)
+static inline void delete_category(struct category** category)
 {
     struct item** end = (*category)->members + (*category)->nmembers;
     for(struct item** p = (*category)->members; p != end; ++p) {
@@ -152,7 +152,7 @@ struct category* append_category(const char* name)
     CATEGORY->members[CATEGORY->nmembers++] = newMember;\
 }while(0)
 
-struct category* get_category(const char* category)
+static inline struct category* get_category(const char* category)
 {
     for(int i = 0; i < ncategories; ++i) {
         if(strcmp(categories[i]->name, category) == 0) {
